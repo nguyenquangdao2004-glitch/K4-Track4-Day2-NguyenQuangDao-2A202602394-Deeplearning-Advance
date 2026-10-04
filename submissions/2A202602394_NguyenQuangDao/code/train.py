@@ -398,9 +398,9 @@ def run(cfg: Config) -> Dict[str, Any]:
 
         # Tính macro-F1 val và top-1 acc
         if compute_metrics is not None:
-            met = compute_metrics(val_y, val_probs)
+            met = compute_metrics(val_y, val_pred, val_probs)
             val_f1 = met["macro_f1"]
-            val_acc = met["top1_acc"]
+            val_acc = met["top1"]
         else:
             val_acc = float((val_pred == val_y).mean())
             from sklearn.metrics import f1_score
@@ -458,7 +458,7 @@ def run(cfg: Config) -> Dict[str, Any]:
             save_predictions(pred_path(cfg, "test"), test_fns, test_y, test_probs)
 
         if compute_metrics is not None:
-            test_metrics = compute_metrics(test_y, test_probs)
+            test_metrics = compute_metrics(test_y, test_probs.argmax(axis=1), test_probs)
 
     # 8. Lưu history.csv và vẽ biểu đồ curves/
     history_df = pd.DataFrame(history)
