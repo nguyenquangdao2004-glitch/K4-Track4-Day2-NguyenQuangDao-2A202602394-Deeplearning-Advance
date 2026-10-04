@@ -365,7 +365,7 @@ def save_group(out_dir: Path, tag: str, g: Group, names: list[str]) -> None:
                **{k: {"mean": g.summary[k][0], "std": g.summary[k][1]} for k in SCALARS},
                **{k: {"mean": g.summary[k][0].tolist(), "std": g.summary[k][1].tolist()} for k in VECTORS},
                "classes": names}
-    (out_dir / f"{tag}_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
+    (out_dir / f"{tag}_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -497,7 +497,7 @@ def cmd_grade(args) -> int:
         out.mkdir(parents=True, exist_ok=True)
         (out / "grade_I.json").write_text(json.dumps({
             "items": [{"code": c, "criterion": cr, "points": p, "max": m, "note": n} for c, cr, p, m, n in items],
-            "total": got, "max_scored": max_scored, "warnings": warnings}, indent=2, ensure_ascii=False))
+            "total": got, "max_scored": max_scored, "warnings": warnings}, indent=2, ensure_ascii=False), encoding="utf-8")
     return 0
 
 

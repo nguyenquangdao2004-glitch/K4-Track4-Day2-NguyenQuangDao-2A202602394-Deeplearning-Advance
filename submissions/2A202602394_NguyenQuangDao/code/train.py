@@ -360,7 +360,10 @@ def run(cfg: Config) -> Dict[str, Any]:
     criterion = losses_lib.build_criterion(kind=cfg.loss, **loss_kw)
 
     optimizer = build_optimizer(model, cfg)
-    steps_per_epoch = len(train_loader)
+    steps_per_epoch = max(1, len(train_loader))
+    scheduler = build_scheduler(optimizer, cfg, steps_per_epoch)
+    ema = EMA(model, decay=cfg.ema_decay) if cfg.ema_decay is not None else None
+
     if cfg.amp and device.type == "cuda":
         try:
             scaler = torch.amp.GradScaler("cuda", enabled=cfg.amp)
@@ -368,6 +371,8 @@ def run(cfg: Config) -> Dict[str, Any]:
             scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
     else:
         scaler = None
+
+    Path("curves").mkdir(parents=True, exist_ok=True)
 
     # 5. Vòng lặp huấn luyện từng epoch
     history = []
