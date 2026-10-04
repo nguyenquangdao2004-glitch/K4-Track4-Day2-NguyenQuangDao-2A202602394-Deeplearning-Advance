@@ -361,10 +361,13 @@ def run(cfg: Config) -> Dict[str, Any]:
 
     optimizer = build_optimizer(model, cfg)
     steps_per_epoch = len(train_loader)
-    scheduler = build_scheduler(optimizer, cfg, steps_per_epoch)
-    scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp) if (cfg.amp and device.type == "cuda") else None
-
-    ema = EMA(model, cfg.ema_decay) if cfg.ema_decay is not None else None
+    if cfg.amp and device.type == "cuda":
+        try:
+            scaler = torch.amp.GradScaler("cuda", enabled=cfg.amp)
+        except Exception:
+            scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
+    else:
+        scaler = None
 
     # 5. Vòng lặp huấn luyện từng epoch
     history = []

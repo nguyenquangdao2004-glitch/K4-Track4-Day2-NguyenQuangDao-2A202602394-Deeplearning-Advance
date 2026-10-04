@@ -56,6 +56,37 @@ def load_split(labels_dir: str | Path, fold: int = 0) -> tuple[pd.DataFrame, pd.
     return train_df, val_df, test_df
 
 
+def resolve_images_dir(images_dir: str | Path) -> Path:
+    """Tự động phát hiện và giải quyết đường dẫn thư mục ảnh DeepWeeds.
+    Hỗ trợ các trường hợp: data/images, data, /kaggle/input/..., hoặc đường dẫn tương đối.
+    """
+    p = Path(images_dir)
+    # 1. Nếu đường dẫn được truyền vào tồn tại và chứa file .jpg
+    if p.exists() and any(p.glob("*.jpg")):
+        return p
+
+    # 2. Nếu được truyền "data/images" nhưng ảnh nằm ở "data"
+    if p.parent.exists() and any(p.parent.glob("*.jpg")):
+        return p.parent
+
+    # 3. Nếu trong p có thư mục con "images" chứa ảnh
+    if (p / "images").exists() and any((p / "images").glob("*.jpg")):
+        return p / "images"
+
+    # 4. Tìm kiếm trong /kaggle/input (nếu chạy trên Kaggle)
+    if os.path.exists("/kaggle/input"):
+        for root, dirs, files in os.walk("/kaggle/input"):
+            if any(f.lower().endswith(".jpg") for f in files):
+                return Path(root)
+
+    # 5. Tìm kiếm trong các thư mục thông dụng quanh thư mục làm việc
+    for candidate in [Path("data/images"), Path("data"), Path("images"), Path(".")]:
+        if candidate.exists() and any(candidate.glob("*.jpg")):
+            return candidate
+
+    return p
+
+
 def check_split(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame,
                 images_dir: str | Path) -> dict:
     """Kiểm tra bắt buộc trước khi train (README.md, mục 2.1). In ra và trả về dict số liệu.
@@ -65,7 +96,7 @@ def check_split(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFr
     3. hợp ba tập phải bằng đúng 17.509 ảnh
     4. mọi Filename đều tồn tại trong `images_dir` (nếu thư mục ảnh tồn tại)
     """
-    images_dir = Path(images_dir)
+    images_dir = resolve_images_dir(images_dir)
     n_train = len(train_df)
     n_val = len(val_df)
     n_test = len(test_df)
@@ -98,10 +129,11 @@ def check_split(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFr
     test_per_class = test_df["Label"].value_counts().sort_index().to_dict()
 
     # 4. Kiểm tra file ảnh tồn tại trên đĩa (nếu thư mục ảnh đã được giải nén)
-    if images_dir.exists() and any(images_dir.iterdir()):
-        missing = [fn for fn in union_files if not (images_dir / fn).exists()]
+    if images_dir.exists() and any(images_dir.glob("*.jpg")):
+        sample_to_check = list(union_files)[:100]
+        missing = [fn for fn in sample_to_check if not (images_dir / fn).exists()]
         if missing:
-            raise FileNotFoundError(f"Có {len(missing)} ảnh trong danh sách CSV không tìm thấy trong {images_dir}")
+            raise FileNotFoundError(f"Có ảnh trong danh sách CSV không tìm thấy trong {images_dir} (ví dụ: {missing[:3]})")
 
     stats = {
         "n": {
@@ -202,7 +234,7 @@ class DeepWeedsDataset(BaseDataset):
 
     def __init__(self, df: pd.DataFrame, images_dir: str | Path, transform=None):
         self.df = df.reset_index(drop=True)
-        self.images_dir = Path(images_dir)
+        self.images_dir = resolve_images_dir(images_dir)
         self.transform = transform
         self.filenames = self.df["Filename"].tolist()
         self.labels = self.df["Label"].astype(int).tolist()
@@ -213,6 +245,9 @@ class DeepWeedsDataset(BaseDataset):
     def __getitem__(self, i: int):
         fn = self.filenames[i]
         path = self.images_dir / fn
+        if not path.exists():
+            if (self.images_dir.parent / fn).exists():
+                path = self.images_dir.parent / fn
         img = Image.open(path).convert("RGB")
         if self.transform is not None:
             img = self.transform(img)
