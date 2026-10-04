@@ -205,13 +205,17 @@ def train_one_epoch(model, loader, criterion, optimizer, scheduler, scaler, cfg:
 
         if cfg.amp and scaler is not None:
             scaler.scale(loss).backward()
+            scale_before = scaler.get_scale()
             scaler.step(optimizer)
             scaler.update()
+            scale_after = scaler.get_scale()
+            # Chỉ cập nhật scheduler khi optimizer thực sự thực hiện step (không bị skip do gradient overflow)
+            if scale_before <= scale_after:
+                scheduler.step()
         else:
             loss.backward()
             optimizer.step()
-
-        scheduler.step()
+            scheduler.step()
 
         if ema is not None:
             ema.update(model)
