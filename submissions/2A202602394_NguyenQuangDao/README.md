@@ -9,7 +9,7 @@
 
 ## 1. Liên kết Notebook Thực Nghiệm (Kaggle)
 
-- **Kaggle Notebook Link**: *[Cập nhật link Kaggle Notebook của bạn tại đây]*
+- **Kaggle Notebook Link**: [https://www.kaggle.com/code/daokevin/track4-lab2](https://www.kaggle.com/code/daokevin/track4-lab2)
 - **Chế độ thực thi**: GPU T4 x2, Internet: ON, Persistence: Variables & Files.
 
 ---
