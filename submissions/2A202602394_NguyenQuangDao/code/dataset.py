@@ -238,30 +238,43 @@ class DeepWeedsDataset(BaseDataset):
         self.transform = transform
         self.filenames = self.df["Filename"].tolist()
         self.labels = self.df["Label"].astype(int).tolist()
+        
+        # Tiền xử lý đường dẫn chuỗi một lần duy nhất, tránh syscall .exists() lặp lại hàng nghìn lần mỗi epoch
+        parent_dir = self.images_dir.parent
+        self.paths = []
+        for fn in self.filenames:
+            p1 = self.images_dir / fn
+            if p1.exists():
+                self.paths.append(str(p1))
+            else:
+                self.paths.append(str(parent_dir / fn))
 
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, i: int):
-        fn = self.filenames[i]
-        path = self.images_dir / fn
-        if not path.exists():
-            if (self.images_dir.parent / fn).exists():
-                path = self.images_dir.parent / fn
-        img = Image.open(path).convert("RGB")
+        img = Image.open(self.paths[i]).convert("RGB")
         if self.transform is not None:
             img = self.transform(img)
-        label = int(self.labels[i])
-        return img, label, fn
+        return img, self.labels[i], self.filenames[i]
 
 
 def make_loader(df: pd.DataFrame, images_dir: str | Path, transform, batch_size: int,
-                train: bool, sampler: Optional[str] = None, num_workers: int = 2):
-    """Tạo DataLoader theo quy chuẩn của repo."""
+                train: bool, sampler: Optional[str] = None, num_workers: int = 4):
+    """Tạo DataLoader theo quy chuẩn của repo, tối ưu I/O đa luồng và GPU memory transfer."""
     if torch is None or DataLoader is None:
         raise ImportError("Cần cài đặt PyTorch để tạo DataLoader")
 
     dataset = DeepWeedsDataset(df, images_dir, transform=transform)
+    use_cuda = torch.cuda.is_available()
+    workers = min(4, os.cpu_count() or 2) if num_workers is None else num_workers
+
+    loader_kwargs = {
+        "batch_size": batch_size,
+        "num_workers": workers,
+        "pin_memory": use_cuda,
+        "persistent_workers": (workers > 0),
+    }
 
     if train:
         if sampler == "balanced":
@@ -271,28 +284,22 @@ def make_loader(df: pd.DataFrame, images_dir: str | Path, transform, batch_size:
             data_sampler = WeightedRandomSampler(sample_weights_tensor, num_samples=len(sample_weights), replacement=True)
             return DataLoader(
                 dataset,
-                batch_size=batch_size,
                 sampler=data_sampler,
-                num_workers=num_workers,
-                pin_memory=torch.cuda.is_available(),
                 drop_last=True,
+                **loader_kwargs
             )
         else:
             return DataLoader(
                 dataset,
-                batch_size=batch_size,
                 shuffle=True,
-                num_workers=num_workers,
-                pin_memory=torch.cuda.is_available(),
                 drop_last=True,
+                **loader_kwargs
             )
     else:
         # Khi đánh giá: KHÔNG shuffle, giữ nguyên thứ tự file
         return DataLoader(
             dataset,
-            batch_size=batch_size,
             shuffle=False,
-            num_workers=num_workers,
-            pin_memory=torch.cuda.is_available(),
             drop_last=False,
+            **loader_kwargs
         )

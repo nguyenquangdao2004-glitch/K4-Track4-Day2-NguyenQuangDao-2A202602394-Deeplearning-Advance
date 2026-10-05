@@ -82,7 +82,7 @@ class Config:
     warmup_epochs: float = 1.0
     ema_decay: Optional[float] = None
     amp: bool = True
-    num_workers: int = 2
+    num_workers: int = 4
     # --- đường dẫn ---
     images_dir: str = "data/images"
     labels_dir: str = "data/labels"
@@ -103,7 +103,7 @@ def pred_path(cfg: Config, split: str) -> Path:
 
 
 def set_seed(seed: int) -> None:
-    """Cố định mọi nguồn ngẫu nhiên."""
+    """Cố định mọi nguồn ngẫu nhiên và tối ưu hoá GPU benchmark."""
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -111,8 +111,7 @@ def set_seed(seed: int) -> None:
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.benchmark = True
 
 
 def build_optimizer(model, cfg: Config):
@@ -179,8 +178,8 @@ def train_one_epoch(model, loader, criterion, optimizer, scheduler, scaler, cfg:
     num_batches = len(loader)
 
     for images, labels, _ in loader:
-        images = images.to(device)
-        labels = labels.to(device)
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
 
         optimizer.zero_grad()
 
@@ -237,8 +236,8 @@ def evaluate(model, loader, criterion, device):
 
     with torch.inference_mode():
         for images, labels, filenames in loader:
-            images = images.to(device)
-            labels = labels.to(device)
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
 
             if device.type == "cuda":
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
